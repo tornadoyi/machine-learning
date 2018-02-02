@@ -1,0 +1,9 @@
+.idea
+*.pyc
+build
+dist
+*.egg-info
+.ipynb_checkpoints
+*.ipynb
+.DS_Store
+xcuserdata
