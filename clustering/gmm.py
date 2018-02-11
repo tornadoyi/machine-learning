@@ -21,7 +21,6 @@ def gmm(datas, num_clusters, max_iter):
 
     w = None
     for i in range(max_iter):
-        print(i)
         # multivariate guassian distribution
         x_mu = (x - mu)[:, :, np.newaxis, :] # m x k x 1 x 2
         sigma_inv = np.linalg.inv(sigma)
