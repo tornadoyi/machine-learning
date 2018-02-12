@@ -88,6 +88,36 @@ def gen_datas(map_bounds, num_area, area_point_range):
     return datas[indexes], labels[indexes]
 
 
+def gen_circle_datas(centers, radius, counts):
+    assert len(centers) == len(radius)
+    assert len(centers) == len(counts)
+
+    def random_range(shape, min, max):
+        assert max > min
+        x = np.random.rand(*shape)
+        return min + (max - min) * x
+
+    datas, labels = [], []
+    for i in range(len(centers)):
+        o = centers[i]
+        r = radius[i]
+        c = counts[i]
+        p = np.array([r, 0])
+
+        theta = random_range((c, ), 0, 360)
+        cos, sin = np.cos(theta)[:, np.newaxis], np.sin(theta)[:, np.newaxis]
+        transform = np.hstack([cos, -sin, sin, cos]).reshape([c, 2, 2])
+        v = np.tensordot(transform, p[np.newaxis, :, np.newaxis], axes=[[2], [1]])
+        p1 = o + np.squeeze(np.squeeze(v, axis=2), axis=2)
+        datas.append(p1)
+        labels.append(np.array([i] * c))
+
+    datas, labels = np.vstack(datas), np.hstack(labels)
+    indexes = np.arange(len(datas))
+    np.random.shuffle(indexes)
+
+    return datas[indexes], labels[indexes]
+
 
 def show(map_bounds, datas, num_clusters, classes, centers, iters, click_callback):
     global figure, axes_list
@@ -121,13 +151,34 @@ def show(map_bounds, datas, num_clusters, classes, centers, iters, click_callbac
     plt.show()
 
 
+def show_circle(datas, labels):
+    global figure, axes_list
+    try:
+        for ax in axes_list: ax.cla()
+    except:
+        figure, axes_list = plt.subplots(1, 2)
+
+    org_ax, cls_ax = axes_list
+    for i in np.unique(labels):
+        cls_data = datas[labels == i]
+        if len(cls_data) == 0: continue
+        cls_ax.plot(cls_data[:, 0], cls_data[:, 1], linestyle='None', marker='o')
+
+    plt.show()
+
+
 MAP_BOUNDS = (-10, -10, 10, 10)
 NUM_AREA = (2, 2)
 AREA_POINTS_RANGE = (5, 10)
-MAX_ITERS = 10
+MAX_ITERS = 100
 SHOW_PROGRESS = True
 NUM_CLUSTERS = NUM_AREA[0] * NUM_AREA[1]
 
 datas, labels = gen_datas(MAP_BOUNDS, NUM_AREA, AREA_POINTS_RANGE)
 classes = gmm(datas, NUM_CLUSTERS, MAX_ITERS)
 show(MAP_BOUNDS, datas, NUM_CLUSTERS, classes, None, MAX_ITERS, None)
+
+#datas, labels = gen_circle_datas([(0, 0), (0, 0)], [2, 5], [20, 20])
+#classes = gmm(datas, 2, MAX_ITERS)
+#print(np.unique(classes))
+#show_circle(datas, classes)
