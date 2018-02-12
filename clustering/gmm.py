@@ -3,16 +3,25 @@ import random
 import matplotlib.pyplot as plt
 
 
-def gmm(datas, num_clusters, max_iter):
+def gmm(datas, num_clusters, max_iter, init_mu=None, init_sigma=None, init_alpha=None):
     assert datas.ndim == 2
 
     m = len(datas)
     k = num_clusters
     n_variate = datas.shape[1]
-    indexes = random.sample(range(m), k)
-    mu = datas[indexes][np.newaxis, :] # 1 x k x 2
-    sigma = np.repeat((np.eye(n_variate) * 1.0)[np.newaxis, :, :], k, axis=0) # k x 2 x 2
-    alpha = np.array([1/k] * k)[np.newaxis, :]  # 1 x k
+
+    mu = init_mu
+    if mu is None:
+        indexes = random.sample(range(m), k)
+        mu = datas[indexes][np.newaxis, :] # 1 x k x 2
+
+    sigma = init_sigma
+    if init_sigma is None:
+        sigma = np.repeat((np.eye(n_variate) * 1.0)[np.newaxis, :, :], k, axis=0) # k x 2 x 2
+
+    alpha = init_alpha
+    if init_alpha is None:
+        alpha = np.array([1/k] * k)[np.newaxis, :]  # 1 x k
 
     x = datas[:, np.newaxis, :]   # m x 1 x 2
     x_T = np.transpose(x, axes=[0, 2, 1]) # m x 2 x 1
@@ -50,7 +59,11 @@ def gmm(datas, num_clusters, max_iter):
         alpha = (1 / m) * w_sum[np.newaxis, :]  # 1 x k
         mu = np.sum(w[:, :, np.newaxis] * x, axis=0) / w_sum[:, np.newaxis]  #  (m x k x 1) * (m x 1 x 2) = m x k x 2  sum(m x k x 2) / k x 1 = k x 2
         mu = mu[np.newaxis, :, :]  # 1 x k x 2
+        x_mu = (x - mu)[:, :, np.newaxis, :]  # m x k x 1 x 2
         sigma = np.tensordot(np.transpose(x_mu, axes=[0, 1, 3, 2]), x_mu, axes=[[3], [2]]) # m x k x 2 x m x k x 2
+        #sigma = np.transpose(sigma, axes=[0, 3, 1, 4, 2, 5])  # m x m x k x k x 2 x 2
+        #sigma = sigma[m_indexes, m_indexes, :, :, :, :] # m x k x k x 2 x 2
+        #sigma = sigma[:, k_indexes, k_indexes, :, :]  # m x k x 2 x 2
         sigma = sigma[:, k_indexes, :, :, k_indexes, :] # k x m x 2 x m x 2
         sigma = sigma[:, m_indexes, :, m_indexes, :] # m x k x 2 x 2
         sigma = np.sum(w[:, :, np.newaxis, np.newaxis] * sigma, axis=0)  # k x 2 x 2
@@ -75,6 +88,11 @@ def gen_datas(map_bounds, num_area, area_point_range):
         for j in range(num_area[1]):
             min_x, min_y = map_bounds[0] + area_width * i, map_bounds[1] + area_height * j
             max_x, max_y = min_x + area_width, min_y + area_height
+            r = 0.4
+            min_x += (max_x - min_x) * r
+            max_x -= (max_x - min_x) * r
+            min_y += (max_y - min_y) * r
+            max_y -= (max_y - min_y) * r
             num_points = np.random.randint(*area_point_range)
             x = random_range((num_points,), min_x, max_x)[:, np.newaxis]
             y = random_range((num_points,), min_y, max_y)[:, np.newaxis]
@@ -167,18 +185,21 @@ def show_circle(datas, labels):
     plt.show()
 
 
-MAP_BOUNDS = (-10, -10, 10, 10)
+MAP_BOUNDS = (-20, -20, 20, 20)
 NUM_AREA = (2, 2)
-AREA_POINTS_RANGE = (5, 10)
+AREA_POINTS_RANGE = (100, 200)
 MAX_ITERS = 100
 SHOW_PROGRESS = True
 NUM_CLUSTERS = NUM_AREA[0] * NUM_AREA[1]
 
+init_mu = np.array([[-10, -10], [10, 10], [-10, 10], [10, -10]])
+
 datas, labels = gen_datas(MAP_BOUNDS, NUM_AREA, AREA_POINTS_RANGE)
-classes = gmm(datas, NUM_CLUSTERS, MAX_ITERS)
+classes = gmm(datas, NUM_CLUSTERS, MAX_ITERS, init_mu=init_mu)
+print(np.unique(classes))
 show(MAP_BOUNDS, datas, NUM_CLUSTERS, classes, None, MAX_ITERS, None)
+
 
 #datas, labels = gen_circle_datas([(0, 0), (0, 0)], [2, 5], [20, 20])
 #classes = gmm(datas, 2, MAX_ITERS)
-#print(np.unique(classes))
 #show_circle(datas, classes)
