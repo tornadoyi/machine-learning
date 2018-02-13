@@ -9,6 +9,7 @@ def gmm(datas, num_clusters, max_iter, init_mu=None, init_sigma=None, init_alpha
     m = len(datas)
     k = num_clusters
     n_variate = datas.shape[1]
+    diagonal_indexes = list(range(n_variate))
 
     mu = init_mu
     if mu is None:
@@ -24,7 +25,6 @@ def gmm(datas, num_clusters, max_iter, init_mu=None, init_sigma=None, init_alpha
         alpha = np.array([1/k] * k)[np.newaxis, :]  # 1 x k
 
     x = datas[:, np.newaxis, :]   # m x 1 x 2
-    x_T = np.transpose(x, axes=[0, 2, 1]) # m x 2 x 1
     k_indexes = list(range(k))
     m_indexes = list(range(m))
 
@@ -32,27 +32,27 @@ def gmm(datas, num_clusters, max_iter, init_mu=None, init_sigma=None, init_alpha
     for i in range(max_iter):
         # multivariate guassian distribution
         x_mu = (x - mu)[:, :, np.newaxis, :] # m x k x 1 x 2
+        x_mu_T = np.transpose(x_mu, [0, 1, 3, 2])  # m x k x 2 x 1
         sigma_inv = np.linalg.inv(sigma)
         g_exp = np.tensordot(x_mu, sigma_inv, axes=[[3], [1]])  # m x k x 1 x k x 2
         g_exp = np.squeeze(g_exp, axis=2)[:, k_indexes, k_indexes] # m x k x 2
         g_exp = g_exp[:, :, np.newaxis, :] # m x k x 1 x 2
-        g_exp = np.tensordot(g_exp, x_T, axes=[[3], [1]])  # m x k x 1 x m x 1
-        g_exp = np.squeeze(np.squeeze(g_exp, axis=4), axis=2)  # m x k x m
-        g_exp = g_exp[m_indexes, :, m_indexes] # m x k
+        g_exp = np.tensordot(g_exp, x_mu_T, axes=[[3], [2]])  # m x k x 1 x m x k x 1
+        g_exp = np.squeeze(np.squeeze(g_exp, axis=5), axis=2)  # m x k x m x k
+        g_exp = g_exp[m_indexes, :, m_indexes, :]  # m x k x k
+        g_exp = g_exp[:, k_indexes, k_indexes] # m x k
 
         sigma_det = np.linalg.det(sigma)
         g_coef = 1 / (np.power(2 * np.pi, n_variate / 2) * np.sqrt(sigma_det))  # k
         pdf = g_coef[np.newaxis, :] * np.exp(-0.5 * g_exp) # m x k
-
-        # exp can be easy to equal inf
-        pdf[pdf == np.inf] = 1e+200
 
         # bayes formula
         w_pdf = alpha * pdf     # m x k
         w = w_pdf / np.sum(w_pdf, axis=1, keepdims=True) # m x k
 
         # clean zero probabilities
-        w = (w + 1e-7) / np.sum(w, axis=1, keepdims=True) # m x k
+        if np.any(w == 0):
+            w = (w + 1e-7) / np.sum(w, axis=1, keepdims=True) # m x k
 
         # update parameters
         w_sum = np.sum(w, axis=0) # k
@@ -60,14 +60,19 @@ def gmm(datas, num_clusters, max_iter, init_mu=None, init_sigma=None, init_alpha
         mu = np.sum(w[:, :, np.newaxis] * x, axis=0) / w_sum[:, np.newaxis]  #  (m x k x 1) * (m x 1 x 2) = m x k x 2  sum(m x k x 2) / k x 1 = k x 2
         mu = mu[np.newaxis, :, :]  # 1 x k x 2
         x_mu = (x - mu)[:, :, np.newaxis, :]  # m x k x 1 x 2
-        sigma = np.tensordot(np.transpose(x_mu, axes=[0, 1, 3, 2]), x_mu, axes=[[3], [2]]) # m x k x 2 x m x k x 2
-        #sigma = np.transpose(sigma, axes=[0, 3, 1, 4, 2, 5])  # m x m x k x k x 2 x 2
-        #sigma = sigma[m_indexes, m_indexes, :, :, :, :] # m x k x k x 2 x 2
-        #sigma = sigma[:, k_indexes, k_indexes, :, :]  # m x k x 2 x 2
+        x_mu_T = np.transpose(x_mu, axes=[0, 1, 3, 2])
+        sigma = np.tensordot(x_mu_T, x_mu, axes=[[3], [2]]) # m x k x 2 x m x k x 2
         sigma = sigma[:, k_indexes, :, :, k_indexes, :] # k x m x 2 x m x 2
         sigma = sigma[:, m_indexes, :, m_indexes, :] # m x k x 2 x 2
         sigma = np.sum(w[:, :, np.newaxis, np.newaxis] * sigma, axis=0)  # k x 2 x 2
         sigma = sigma / w_sum[:, np.newaxis, np.newaxis] # k x 2 x 2
+
+        # check inverse matrix
+        if np.any(np.linalg.det(sigma) == 0):
+            sigma[:, diagonal_indexes, diagonal_indexes] += 1e-7
+
+        if np.any(np.isnan(sigma)):
+            print('sigma')
 
     return np.argmax(w, axis=1)
 
@@ -187,16 +192,17 @@ def show_circle(datas, labels):
 
 MAP_BOUNDS = (-20, -20, 20, 20)
 NUM_AREA = (2, 2)
-AREA_POINTS_RANGE = (100, 200)
-MAX_ITERS = 100
+AREA_POINTS_RANGE = (50, 60)
+MAX_ITERS = 1000
 SHOW_PROGRESS = True
 NUM_CLUSTERS = NUM_AREA[0] * NUM_AREA[1]
 
-init_mu = np.array([[-10, -10], [10, 10], [-10, 10], [10, -10]])
+#init_mu = np.array([[-10, -10], [10, 10], [-10, 10], [10, -10]])
+init_mu = None
+
 
 datas, labels = gen_datas(MAP_BOUNDS, NUM_AREA, AREA_POINTS_RANGE)
 classes = gmm(datas, NUM_CLUSTERS, MAX_ITERS, init_mu=init_mu)
-print(np.unique(classes))
 show(MAP_BOUNDS, datas, NUM_CLUSTERS, classes, None, MAX_ITERS, None)
 
 
