@@ -1,34 +1,39 @@
 import matplotlib.pyplot as plt
 
 class Plot(object):
-    def __init__(self, axes=None, brushes=[]):
+    def __init__(self, axes=None, brushes=[], data_processor=None):
         self.__axes = axes or plt.subplot()
         self.__brushes = brushes
-        self.__datas = None
-        self.__event_dict = {}
+        self.__data_processor = data_processor
+
+    def add_brush(self, brush):
+        self.__brushes.append(brush)
+        return len(self.__brushes) - 1
+
+    def remove_brush(self, index):
+        del self.__brushes[index]
 
     def erase(self): self.__axes.cla()
 
-    def paint(self, datas, erase_before=False):
-        if erase_before: self.erase()
-        self.__datas = datas
-        if self.__datas is None: return
+    def paint(self, datas):
+        if self.__data_processor is not None: datas = self.__data_processor(datas)
+        if datas is None: return
         for b in self.__brushes:
-            if not b.is_valid(self.__datas): continue
-            f = self.__axes[b.method]
-            f(data=self.__datas, **b.kwargs)
+            if not b.is_valid(datas): continue
+            b.method(self.__axes, data=datas, **b.kwargs)
 
-    def repaint(self, datas): self.paint(datas, erase_before=True)
-
-    def show(self, datas, erase_before=False):
-        self.paint(datas, erase_before)
+    def show(self, datas=None):
+        self.paint(datas)
         plt.show()
 
     def connect_event(self, name, functor):
         def __listener(event):
             if event.inaxes != self.__axes: return
-            functor()
+            functor(event)
         return self.__axes.get_figure().canvas.mpl_connect(name, __listener)
 
     def disconnect_event(self, id): self.__axes.get_figure().canvas.mpl_disconnect(id)
 
+    def set_data_processor(self, processor): self.__data_processor = processor
+
+    def set_title(self, title): self.__axes.set_title(title)

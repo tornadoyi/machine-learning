@@ -28,13 +28,13 @@ def area(bounds, num_area, num_area_points, area_border_ratio=0):
                 Datas and labels
     """
     if isinstance(num_area_points, (tuple, list)):
-        num_area_points = list([num_area_points, num_area_points+1])
+        num_area_points = list(num_area_points)
     elif isinstance(num_area_points, int):
         num_area_points = [num_area_points, num_area_points + 1]
     else: raise Exception('Type of num_area_points should be int, list or tuple')
 
-    area_width = (bounds[2] - bounds[0]) /  num_area[0]
-    area_height = (bounds[3] - bounds[1]) / num_area[1]
+    area_width = bounds[2] /  num_area[0]
+    area_height = bounds[3] / num_area[1]
 
     datas = []
     labels = []
