@@ -18,7 +18,8 @@ def gmm(datas, num_clusters, max_iter=np.inf,
     mu = init_mu
     if mu is None:
         indexes = random.sample(range(m), k)
-        mu = datas[indexes][np.newaxis, :] # 1 x k x 2
+        mu = datas[indexes] # k x 2
+    mu = mu[np.newaxis, :] # 1 x k x 2
 
     sigma = init_sigma
     if init_sigma is None:
@@ -26,7 +27,8 @@ def gmm(datas, num_clusters, max_iter=np.inf,
 
     alpha = init_alpha
     if init_alpha is None:
-        alpha = np.array([1/k] * k)[np.newaxis, :]  # 1 x k
+        alpha = np.array([1/k] * k) # k
+    alpha = alpha[np.newaxis, :] # 1 x k
 
     x = datas[:, np.newaxis, :]   # m x 1 x 2
     k_indexes = list(range(k))
@@ -120,7 +122,9 @@ def update(f, plt, datas, num_clusters):
 
 
 datas, labels = dataset.point.area(bounds=(-10, -10, 20, 20), num_area=(2, 2), num_area_points=(5, 10), area_border_ratio=0.3)
-f = gmm(datas, len(np.unique(labels)), 1000, init_mu=None, init_sigma=None, init_alpha=None)
+#datas, labels = dataset.point.circle([[0, 0], [0, 0]], [3, 6], [30])
+
+f = gmm(datas, len(np.unique(labels)))
 plt = plot.create_cluster_plot()
 plt.connect_event('button_press_event', lambda _: update(f, plt, datas, len(np.unique(labels))))
 plt.show({'point_x': datas[:, 0], 'point_y': datas[:, 1]})

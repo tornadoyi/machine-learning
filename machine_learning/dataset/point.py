@@ -72,9 +72,9 @@ def circle(centers, radius, counts):
     assert len(radius) == 1 or len(radius) == circle_count
     assert len(counts) == 1 or len(counts) == circle_count
 
-    centers = list(centers) * (circle_count - len(centers))
-    radius = list(radius) * (circle_count - len(radius))
-    counts = list(counts) * (circle_count - len(counts))
+    if len(centers) != circle_count: centers = list(centers) * circle_count
+    if len(radius) != circle_count: radius = list(radius) * circle_count
+    if len(counts) != circle_count: counts = list(counts) * circle_count
 
     datas, labels = [], []
     for i in range(circle_count):
@@ -83,10 +83,11 @@ def circle(centers, radius, counts):
         c = counts[i]
         p = np.array([r, 0])
         count_range = c if isinstance(c, (tuple, list)) else (c, c+1)
+        num_points = np.random.randint(*count_range)
 
-        theta = _random_range(count_range, 0, 360)
+        theta = _random_range((num_points, ), 0, 360)
         cos, sin = np.cos(theta)[:, np.newaxis], np.sin(theta)[:, np.newaxis]
-        transform = np.hstack([cos, -sin, sin, cos]).reshape([c, 2, 2])
+        transform = np.hstack([cos, -sin, sin, cos]).reshape([num_points, 2, 2])
         v = np.tensordot(transform, p[np.newaxis, :, np.newaxis], axes=[[2], [1]])
         p1 = o + np.squeeze(np.squeeze(v, axis=2), axis=2)
         datas.append(p1)
