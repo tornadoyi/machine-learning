@@ -50,7 +50,7 @@ def area(bounds, num_area, num_area_points, area_border_ratio=0):
             x = _random_range((num_points,), min_x, max_x)[:, np.newaxis]
             y = _random_range((num_points,), min_y, max_y)[:, np.newaxis]
             datas.append(np.hstack([x,y]))
-            labels.append(np.ones(num_points) * (i * num_area[1] + j))
+            labels.append(np.ones(num_points, dtype=np.int) * (i * num_area[1] + j))
 
     return _shuffle_datas(np.vstack(datas), np.hstack(labels))
 

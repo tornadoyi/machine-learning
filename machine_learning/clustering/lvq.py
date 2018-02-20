@@ -1,9 +1,10 @@
+import copy
 import numpy as np
 import random
-import matplotlib.pyplot as plt
+from machine_learning import dataset, plot
 
 
-def lvq(datas, labels, learning_rate, max_iters, batch_iters=None):
+def lvq(datas, labels, learning_rate, max_iters=np.inf, stop_mse=1e-1, batch_iters=None):
     assert datas.ndim == 2
     assert labels.ndim == 1
     assert len(datas) == len(labels)
@@ -16,9 +17,12 @@ def lvq(datas, labels, learning_rate, max_iters, batch_iters=None):
     p_x = datas[p_indexes]
     p_x_align = p_x[np.newaxis, :, :]
     p_y = labels[p_indexes]
+    mse = np.inf
+    pre_p_x = copy.deepcopy(p_x)
 
     # train
-    for i in range(max_iters):
+    i = 0
+    while True:
         indexes = random.sample(range(len(datas)), batch_iters)
         batch_x = datas[indexes]
         batch_x_align = batch_x[:, np.newaxis, :]
@@ -39,94 +43,48 @@ def lvq(datas, labels, learning_rate, max_iters, batch_iters=None):
 
         p_x[min_p_indexes] = p_x[min_p_indexes] + lr_mat * delta
 
+        # calculate mse
+        mse = np.square(p_x - pre_p_x).sum() / len(p_x)
 
-    return p_x, p_y
+        # check stop
+        if i >= max_iters: break
+        if mse < stop_mse: break
 
-
-
-# generate datas with n area
-def gen_datas(map_bounds, num_area, area_point_range):
-    def random_range(shape, min, max):
-        assert max > min
-        x = np.random.rand(*shape)
-        return min + (max - min) * x
-
-    area_width = (map_bounds[2] - map_bounds[0]) /  num_area[0]
-    area_height = (map_bounds[3] - map_bounds[1]) / num_area[1]
-
-    datas = []
-    labels = []
-    for i in range(num_area[0]):
-        for j in range(num_area[1]):
-            min_x, min_y = map_bounds[0] + area_width * i, map_bounds[1] + area_height * j
-            max_x, max_y = min_x + area_width, min_y + area_height
-            num_points = np.random.randint(*area_point_range)
-            x = random_range((num_points,), min_x, max_x)[:, np.newaxis]
-            y = random_range((num_points,), min_y, max_y)[:, np.newaxis]
-            datas.append(np.hstack([x,y]))
-            labels.append(np.ones(num_points) * (i * num_area[1] + j))
-
-    datas, labels = np.vstack(datas), np.hstack(labels)
-    indexes = np.arange(len(datas))
-    np.random.shuffle(indexes)
-
-    return datas[indexes], labels[indexes]
+        # next iterator
+        pre_p_x = copy.deepcopy(p_x)
+        i += 1
 
 
-def show(map_bounds, datas, classes, proto_vectors, iters, click_callback):
-    global figure, axes
-    try:
-        axes.cla()
-    except:
-        figure = plt.figure()
-        axes = figure.add_subplot(111)
-
-    axes.axis([map_bounds[0], map_bounds[2], map_bounds[1], map_bounds[3]])
-    axes.set_title("Iterators: {}".format(iters))
-
-    # register press event
-    cid = figure.canvas.mpl_connect('button_press_event', click_callback)
-
-    # draw category datas
-    if classes is not None:
-        for c in np.unique(classes):
-            cls_data = datas[classes == c]
-            if len(cls_data) == 0: continue
-            axes.plot(cls_data[:, 0], cls_data[:, 1], linestyle='None', marker='o')
-
-    # draw proto vectors
-    axes.plot(proto_vectors[:, 0], proto_vectors[:, 1], linestyle='None', marker='+', color='k', markersize=10)
+    return i, p_x, p_y, mse
 
 
 
+def update(event, plt, num_clusters):
+    if event.xdata is None: return
+
+    # inference
+    v = np.array([event.xdata, event.ydata])[np.newaxis, :]
+    d = np.sqrt(np.sum(np.square(v - p_x), axis=1))
+    min_index = np.argmin(d)
+    cls = p_y[min_index]
+
+    # paint new point
+    plt.set_title('Iterators: {} MSE: {:.2f}'.format(iter, mse))
+    plt.paint({
+        'point_x': v[:, 0], 'point_y': v[:, 1],
+        'labels': [cls], 'num_clusters': num_clusters})
     plt.show()
 
 
-MAP_BOUNDS = (-10, -10, 10, 10)
-NUM_AREA = (2, 2)
-AREA_POINTS_RANGE = (5, 10)
-MAX_ITERS = 10
-SHOW_PROGRESS = True
-NUM_CLUSTERS = NUM_AREA[0] * NUM_AREA[1]
-
-datas, labels = gen_datas(MAP_BOUNDS, NUM_AREA, AREA_POINTS_RANGE)
-pv_x, pv_y = lvq(datas, labels, 0.3, MAX_ITERS, batch_iters=None)
-
-
-iters = 0
-def press_callback(event):
-    if event.xdata is None: return
-    global datas, labels
-    # inference
-    v = np.array([event.xdata, event.ydata])
-    d = np.sqrt(np.sum(np.square(v - pv_x), axis=1))
-    min_index = np.argmin(d)
-    cls = pv_y[min_index]
-
-    # update datas
-    datas = np.vstack([datas, v[np.newaxis, :]])
-    labels = np.hstack([labels, cls])
-    show(MAP_BOUNDS, datas, labels, pv_x, MAX_ITERS, press_callback)
+datas, labels = dataset.point.area(bounds=(-10, -10, 20, 20), num_area=(2, 2), num_area_points=(5, 10), area_border_ratio=0.3)
+iter, p_x, p_y, mse = lvq(datas, labels, 0.3)
+plt = plot.create_cluster_plot()
+plt.connect_event('button_press_event', lambda event: update(event, plt, len(np.unique(labels))))
+plt.set_title('Iterators: {} MSE: {:.2f}'.format(iter, mse))
+plt.show({
+        'point_x': datas[:, 0], 'point_y': datas[:, 1],
+        'center_x': p_x[:, 0], 'center_y': p_x[:, 1],
+        'labels': labels, 'num_clusters': len(np.unique(labels))})
 
 
-show(MAP_BOUNDS, datas, labels, pv_x, MAX_ITERS, press_callback)
+
