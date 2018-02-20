@@ -19,8 +19,9 @@ class Plot(object):
         if self.__data_processor is not None: datas = self.__data_processor(datas)
         if datas is None: return
         for b in self.__brushes:
-            if not b.is_valid(datas): continue
-            b.method(self.__axes, data=datas, **b.kwargs)
+            valid, kwargs = b.parse_kwargs(datas)
+            if not valid: continue
+            b.method(self.__axes, **kwargs)
 
     def show(self, datas=None):
         self.paint(datas)

@@ -1,34 +1,50 @@
 import inspect
-from types import FunctionType, MethodType
 from matplotlib import axes
+from collections import namedtuple
+
+_Arg = namedtuple('Arg', ['value', 'data_arg', 'parameter'])
+
 
 class Brush(object):
-    def __init__(self, method=None, **kwargs):
+    def __init__(self, method=None, args={}, data_args={}):
         self.__method = getattr(axes.Axes, method)
-        self.__kwargs = kwargs
-        self.__required_params = []
-        self.__required_data_key = []
+        self.__all_args = {}
 
         # analyse method parameters
-        sig = inspect.signature(self.__method)
-        for name, param in sig.parameters.items():
-            # find required parameters
-            if param.name == 'self' or param.name == 'kwargs' or param.default is not inspect._empty: continue
-            self.__required_params.append(name)
+        parameters = inspect.signature(self.__method).parameters
+        i = -1
+        for name, param in parameters.items():
+            # drop self, *args, **kwargs
+            i += 1
+            if i == 0 or \
+                param.kind is inspect._VAR_POSITIONAL or \
+                param.kind is inspect._VAR_KEYWORD : continue
 
-            # check all required paramters exist in kwargs
-            if name not in self.__kwargs: raise Exception('{} is a required parameter in function {}'.format(name, method))
+            # found name in args
+            data_arg = False
+            value = None
+            if name in args: value = args[name]
+            elif name in data_args:
+                value = data_args[name]
+                data_arg = True
 
-            self.__required_data_key.append(self.__kwargs[name])
+            if value is None:
+                if param.default is inspect._empty: raise Exception('the argument {} should be supplied in method'.format(name, method))
+                else: continue
+
+            self.__all_args[name] = _Arg(value, data_arg, param)
+
 
 
     @property
     def method(self): return self.__method
 
-    @property
-    def kwargs(self): return self.__kwargs
-
-    def is_valid(self, datas):
-        for key in self.__required_data_key:
-            if key not in datas: return False
-        return True
+    def parse_kwargs(self, datas):
+        kwargs = {}
+        for name, arg in self.__all_args.items():
+            required = arg.parameter.default == inspect._empty
+            v = arg.value
+            if arg.data_arg: v = datas[arg.value] if arg.value in datas else None
+            if v is None and required: return False, None
+            kwargs[name] = v
+        return True, kwargs

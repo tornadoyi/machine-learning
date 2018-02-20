@@ -37,21 +37,21 @@ def kmean(datas, num_clusters, max_iter=np.inf, stop_mse=1e-3):
 
 
 def update(f, plt, datas, num_clusters):
-    cls, centers, iter, mse = None, None, None, None
+    paint = False
     try:
         iter, cls, centers, mse = next(f)
-
-    except StopIteration:
-        pass
-
-    if cls is not None:
         plt.erase()
         plt.set_title('Iterators: {} MSE: {:.2f}'.format(iter, mse))
         plt.paint({
             'point_x': datas[:, 0], 'point_y': datas[:, 1],
             'center_x': centers[:, 0], 'center_y': centers[:, 1],
             'labels': cls, 'num_clusters': num_clusters})
-        plt.show()
+        paint = True
+
+    except StopIteration:
+        pass
+
+    if paint: plt.show()
 
 
 datas, labels = dataset.point.area(bounds=(-10, -10, 20, 20), num_area=(2, 2), num_area_points=(5, 10), area_border_ratio=0.3)

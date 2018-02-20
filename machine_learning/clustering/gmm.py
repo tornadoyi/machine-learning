@@ -1,9 +1,13 @@
+import copy
 import numpy as np
 import random
-import matplotlib.pyplot as plt
+from machine_learning import dataset, plot
 
 
-def gmm(datas, num_clusters, max_iter, init_mu=None, init_sigma=None, init_alpha=None):
+def gmm(datas, num_clusters, max_iter=np.inf,
+        stop_mse_mu=1e-3, stop_mse_sigma=1e-3, stop_mse_alpha=1e-3,
+        init_mu=None, init_sigma=None, init_alpha=None):
+
     assert datas.ndim == 2
 
     m = len(datas)
@@ -29,7 +33,11 @@ def gmm(datas, num_clusters, max_iter, init_mu=None, init_sigma=None, init_alpha
     m_indexes = list(range(m))
 
     w = None
-    for i in range(max_iter):
+    pre_mu = copy.deepcopy(mu)
+    pre_sigma = copy.deepcopy(sigma)
+    pre_alpha = copy.deepcopy(alpha)
+    i = 0
+    while True:
         # multivariate guassian distribution
         x_mu = (x - mu)[:, :, np.newaxis, :] # m x k x 1 x 2
         x_mu_T = np.transpose(x_mu, [0, 1, 3, 2])  # m x k x 2 x 1
@@ -71,141 +79,49 @@ def gmm(datas, num_clusters, max_iter, init_mu=None, init_sigma=None, init_alpha
         if np.any(np.linalg.det(sigma) == 0):
             sigma[:, diagonal_indexes, diagonal_indexes] += 1e-7
 
-        if np.any(np.isnan(sigma)):
-            print('sigma')
+        # calculate mse
+        mse_mu = np.square(mu - pre_mu).sum() / k
+        mse_sigma = np.square(sigma - pre_sigma).sum() / k
+        mse_alpha = np.square(alpha - pre_alpha).sum() / k
 
-    return np.argmax(w, axis=1)
+        # return result
+        yield i, w, np.squeeze(mu, axis=0), sigma, np.squeeze(alpha, axis=0), mse_mu, mse_sigma, mse_alpha
 
+        # check stop
+        if i >= max_iter: break
+        if mse_mu <= stop_mse_mu and mse_sigma < stop_mse_sigma and mse_alpha < stop_mse_alpha: break
 
-# generate datas with n area
-def gen_datas(map_bounds, num_area, area_point_range):
-    def random_range(shape, min, max):
-        assert max > min
-        x = np.random.rand(*shape)
-        return min + (max - min) * x
-
-    area_width = (map_bounds[2] - map_bounds[0]) /  num_area[0]
-    area_height = (map_bounds[3] - map_bounds[1]) / num_area[1]
-
-    datas = []
-    labels = []
-    for i in range(num_area[0]):
-        for j in range(num_area[1]):
-            min_x, min_y = map_bounds[0] + area_width * i, map_bounds[1] + area_height * j
-            max_x, max_y = min_x + area_width, min_y + area_height
-            r = 0.4
-            min_x += (max_x - min_x) * r
-            max_x -= (max_x - min_x) * r
-            min_y += (max_y - min_y) * r
-            max_y -= (max_y - min_y) * r
-            num_points = np.random.randint(*area_point_range)
-            x = random_range((num_points,), min_x, max_x)[:, np.newaxis]
-            y = random_range((num_points,), min_y, max_y)[:, np.newaxis]
-            datas.append(np.hstack([x,y]))
-            labels.append(np.ones(num_points) * (i * num_area[1] + j))
-
-    datas, labels = np.vstack(datas), np.hstack(labels)
-    indexes = np.arange(len(datas))
-    np.random.shuffle(indexes)
-
-    return datas[indexes], labels[indexes]
+        # next iterator
+        pre_mu = copy.deepcopy(mu)
+        pre_sigma = copy.deepcopy(sigma)
+        pre_alpha = copy.deepcopy(alpha)
+        i += 1
 
 
-def gen_circle_datas(centers, radius, counts):
-    assert len(centers) == len(radius)
-    assert len(centers) == len(counts)
 
-    def random_range(shape, min, max):
-        assert max > min
-        x = np.random.rand(*shape)
-        return min + (max - min) * x
-
-    datas, labels = [], []
-    for i in range(len(centers)):
-        o = centers[i]
-        r = radius[i]
-        c = counts[i]
-        p = np.array([r, 0])
-
-        theta = random_range((c, ), 0, 360)
-        cos, sin = np.cos(theta)[:, np.newaxis], np.sin(theta)[:, np.newaxis]
-        transform = np.hstack([cos, -sin, sin, cos]).reshape([c, 2, 2])
-        v = np.tensordot(transform, p[np.newaxis, :, np.newaxis], axes=[[2], [1]])
-        p1 = o + np.squeeze(np.squeeze(v, axis=2), axis=2)
-        datas.append(p1)
-        labels.append(np.array([i] * c))
-
-    datas, labels = np.vstack(datas), np.hstack(labels)
-    indexes = np.arange(len(datas))
-    np.random.shuffle(indexes)
-
-    return datas[indexes], labels[indexes]
-
-
-def show(map_bounds, datas, num_clusters, classes, centers, iters, click_callback):
-    global figure, axes_list
+def update(f, plt, datas, num_clusters):
+    paint = False
     try:
-        for ax in axes_list: ax.cla()
-    except:
-        figure, axes_list = plt.subplots(1, 2)
+        iter, w, mu, sigma, alpha, mse_mu, mse_sigma, mse_alpha  = next(f)
+        labels = np.argmax(w, axis=1)
+        probabilities = np.max(w, axis=1).astype(float)
+        plt.erase()
+        plt.set_title('Iterators: {} MSE: ({:.2f}, {:.2f}, {:.2f})'.format(iter, mse_mu, mse_sigma, mse_alpha))
+        plt.paint({
+            'point_x': datas[:, 0], 'point_y': datas[:, 1], 'point_alpha': probabilities,
+            'center_x': mu[:, 0], 'center_y': mu[:, 1],
+            'labels': labels, 'num_clusters': num_clusters})
+        paint = True
+
+    except StopIteration:
+        pass
+
+    if paint: plt.show()
 
 
-    org_ax, cls_ax = axes_list
-    org_ax.axis([map_bounds[0], map_bounds[2], map_bounds[1], map_bounds[3]])
-    cls_ax.axis([map_bounds[0], map_bounds[2], map_bounds[1], map_bounds[3]])
-    cls_ax.set_title("Iterators: {}".format(iters))
+datas, labels = dataset.point.area(bounds=(-10, -10, 20, 20), num_area=(2, 2), num_area_points=(5, 10), area_border_ratio=0.3)
+f = gmm(datas, len(np.unique(labels)), 1000, init_mu=None, init_sigma=None, init_alpha=None)
+plt = plot.create_cluster_plot()
+plt.connect_event('button_press_event', lambda _: update(f, plt, datas, len(np.unique(labels))))
+plt.show({'point_x': datas[:, 0], 'point_y': datas[:, 1]})
 
-    # register press event
-    cid = figure.canvas.mpl_connect('button_press_event', click_callback)
-
-    # draw original datas
-    org_ax.plot(datas[:, 0], datas[:, 1], 'o')
-
-    # draw category datas
-    if classes is not None:
-        for i in range(num_clusters):
-            cls_data = datas[classes == i]
-            if len(cls_data) == 0: continue
-            cls_ax.plot(cls_data[:, 0], cls_data[:, 1], linestyle='None', marker='o')
-
-    if centers is not None:
-        cls_ax.plot(centers[:, 0], centers[:, 1], linestyle='None', marker='+', color='k', markersize=10)
-
-    plt.show()
-
-
-def show_circle(datas, labels):
-    global figure, axes_list
-    try:
-        for ax in axes_list: ax.cla()
-    except:
-        figure, axes_list = plt.subplots(1, 2)
-
-    org_ax, cls_ax = axes_list
-    for i in np.unique(labels):
-        cls_data = datas[labels == i]
-        if len(cls_data) == 0: continue
-        cls_ax.plot(cls_data[:, 0], cls_data[:, 1], linestyle='None', marker='o')
-
-    plt.show()
-
-
-MAP_BOUNDS = (-20, -20, 20, 20)
-NUM_AREA = (2, 2)
-AREA_POINTS_RANGE = (50, 60)
-MAX_ITERS = 1000
-SHOW_PROGRESS = True
-NUM_CLUSTERS = NUM_AREA[0] * NUM_AREA[1]
-
-#init_mu = np.array([[-10, -10], [10, 10], [-10, 10], [10, -10]])
-init_mu = None
-
-
-datas, labels = gen_datas(MAP_BOUNDS, NUM_AREA, AREA_POINTS_RANGE)
-classes = gmm(datas, NUM_CLUSTERS, MAX_ITERS, init_mu=init_mu)
-show(MAP_BOUNDS, datas, NUM_CLUSTERS, classes, None, MAX_ITERS, None)
-
-
-#datas, labels = gen_circle_datas([(0, 0), (0, 0)], [2, 5], [20, 20])
-#classes = gmm(datas, 2, MAX_ITERS)
-#show_circle(datas, classes)
