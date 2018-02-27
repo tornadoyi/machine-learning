@@ -22,7 +22,7 @@ def train_naive_bayes(xs_discretes, xs_continuous, ys):
     P(c|x) = P(c)P(x|c)/P(x) = P(c)/P(x) * mutiply(P(x_i|c)
 
     '''
-    enum_y = np.unique(ys)
+    enum_y = np.arange(10)#np.unique(ys)
     enum_y_indexes = [np.where(ys == e)[0] for e in enum_y]
 
     xs_discretes = xs_discretes or []
@@ -30,15 +30,14 @@ def train_naive_bayes(xs_discretes, xs_continuous, ys):
     features_discrete, features_continuous = [], []
     for x in xs_discretes:
         x = x.reshape((x.shape[0], -1))
-        m = len(x)
         num_features = x.shape[1]
-        enum_x = np.unique(x)
+        enum_x = np.array([0, 1], dtype=np.int) #np.unique(x)
 
         # calculate probabilities of featrues in all categories with laplace smoothing
         class_prob = np.array([
-            ((x[index, :] == ex).sum(axis=0) + 1) / (m + len(enum_x))
-            for ex in enum_x
+            ((x[index, :] == ex).sum(axis=0) + 1) / (len(index) + len(enum_x))
             for index in enum_y_indexes
+            for ex in enum_x
         ]).reshape([len(enum_y), len(enum_x), num_features]).transpose(0, 2, 1)
 
         features_discrete.append(_DiscreteFeatures(num_features, enum_x, class_prob))
@@ -75,7 +74,6 @@ def inference_naive_bayes(xs_discretes, xs_continuous, model):
     return model.label_enums[label_log_probs.argmax(axis=1)]
 
 
-
 def _binarization(x):
     x = copy.deepcopy(x)
     c = x > 0.5
@@ -110,6 +108,15 @@ DATA_TYPE = 'discrete'
 
 mnist = dataset.mnist.load(one_hot=False)
 train_xs, train_ys, test_xs, test_ys = mnist.train.images, mnist.train.labels, mnist.test.images, mnist.test.labels
+
+l = len(np.unique(train_ys))
+import time
+train_xs = _binarization(train_xs)
+st = time.time()
 model = train_mnist(train_xs, train_ys, DATA_TYPE)
+print('train end time {}'.format(time.time() - st))
+
+st = time.time()
 accuracy = test_mnist(test_xs, test_ys, model, DATA_TYPE)
+print('test end time {}'.format(time.time() - st))
 print('Accuracy {}%'.format(accuracy * 100))
